@@ -29,18 +29,17 @@ public:
     uint32_t error_code;
     void *result;
 
-    template <typename T>
-    MagicMethodLookupResult(T result)
-        : MagicMethodLookupResult{0, reinterpret_cast<void *>(result)}
+    MagicMethodLookupResult(uint32_t ec)
+        : MagicMethodLookupResult{ec, NULL}
+    {
+    }
+
+    MagicMethodLookupResult(void *result)
+        : MagicMethodLookupResult{0, result}
     {
     }
 
     bool is_error() { return error_code != 0; }
-
-    static MagicMethodLookupResult error(uint32_t ec)
-    {
-        return MagicMethodLookupResult(ec, NULL);
-    }
 };
 
 static constexpr uint32_t INVALID_MAGIC_METHOD = 1U;
@@ -49,7 +48,7 @@ static constexpr uint32_t NOT_IMPLEMENTED = 2U;
 // Implementations
 
 #define UNARY_OP_IMPL(name)                                                               \
-    static PyObject *impl##name(PyObject *self)                                           \
+    static PyObject *impl##name##(PyObject * self)                                        \
     {                                                                                     \
         if (!PyObject_HasAttrString(self, #name))                                         \
         {                                                                                 \
@@ -73,7 +72,7 @@ static constexpr uint32_t NOT_IMPLEMENTED = 2U;
 #define BINARY_OP(name) BINARY_OP_IMPL(__##name##__)
 
 #define _RBINARY_OP_IMPL(name, rname)                                                                        \
-    static PyObject *impl##name(PyObject *left, PyObject *right)                                             \
+    static PyObject *impl##name##(PyObject * left, PyObject * right)                                         \
     {                                                                                                        \
         if (!PyObject_HasAttrString(left, #name))                                                            \
         {                                                                                                    \
@@ -321,7 +320,7 @@ static MagicMethodLookupResult get_magic_method_slot(PyTypeObject *type, char co
     if (name == "__len__")
     {
         if (type->tp_as_mapping == NULL && type->tp_as_sequence == NULL)
-            return MagicMethodLookupResult::error(NOT_IMPLEMENTED);
+            return NOT_IMPLEMENTED;
         if (type->tp_as_mapping != NULL)
             return &type->tp_as_mapping->mp_length;
         return &type->tp_as_sequence->sq_length;
@@ -329,7 +328,7 @@ static MagicMethodLookupResult get_magic_method_slot(PyTypeObject *type, char co
     if (name == "__getitem__")
     {
         if (type->tp_as_mapping == NULL && type->tp_as_sequence == NULL)
-            return MagicMethodLookupResult::error(NOT_IMPLEMENTED);
+            return NOT_IMPLEMENTED;
         if (type->tp_as_mapping != NULL)
             return &type->tp_as_mapping->mp_subscript;
         return &type->tp_as_sequence->sq_item;
@@ -337,7 +336,7 @@ static MagicMethodLookupResult get_magic_method_slot(PyTypeObject *type, char co
     if (name == "__setitem__")
     {
         if (type->tp_as_mapping == NULL && type->tp_as_sequence == NULL)
-            return MagicMethodLookupResult::error(NOT_IMPLEMENTED);
+            return NOT_IMPLEMENTED;
         if (type->tp_as_mapping != NULL)
             return &type->tp_as_mapping->mp_ass_subscript;
         return &type->tp_as_sequence->sq_ass_item;
@@ -345,24 +344,24 @@ static MagicMethodLookupResult get_magic_method_slot(PyTypeObject *type, char co
     if (name == "__contains__")
     {
         if (type->tp_as_sequence == NULL)
-            return MagicMethodLookupResult::error(NOT_IMPLEMENTED);
+            return NOT_IMPLEMENTED;
         return &type->tp_as_sequence->sq_contains;
     }
 
     // protocol methods
 
-#define SLOT(method_name, field)                                    \
-    if (name == #method_name)                                       \
-    {                                                               \
-        if (type->tp_as_number == NULL)                             \
-            return MagicMethodLookupResult::error(NOT_IMPLEMENTED); \
-        return &(type->tp_as_number->field);                        \
+#define SLOT(method_name, field)      \
+    if (name == #method_name)                \
+    {                                        \
+        if (type->tp_as_number == NULL)      \
+            return NOT_IMPLEMENTED;          \
+        return &(type->tp_as_number->field); \
     }
 
     if (name == "__add__")
     {
         if (type->tp_as_number == NULL && type->tp_as_sequence == NULL)
-            return MagicMethodLookupResult::error(NOT_IMPLEMENTED);
+            return NOT_IMPLEMENTED;
         if (type->tp_as_number != NULL)
             return &(type->tp_as_number->nb_add);
         return &(type->tp_as_sequence->sq_concat);
@@ -371,7 +370,7 @@ static MagicMethodLookupResult get_magic_method_slot(PyTypeObject *type, char co
     if (name == "__mul__")
     {
         if (type->tp_as_number == NULL && type->tp_as_sequence == NULL)
-            return MagicMethodLookupResult::error(NOT_IMPLEMENTED);
+            return NOT_IMPLEMENTED;
         if (type->tp_as_number != NULL)
             return &(type->tp_as_number->nb_multiply);
         return &type->tp_as_sequence->sq_repeat;
@@ -397,7 +396,7 @@ static MagicMethodLookupResult get_magic_method_slot(PyTypeObject *type, char co
     if (name == "__iadd__")
     {
         if (type->tp_as_number == NULL && type->tp_as_sequence == NULL)
-            return MagicMethodLookupResult::error(NOT_IMPLEMENTED);
+            return NOT_IMPLEMENTED;
         if (type->tp_as_number != NULL)
             return &(type->tp_as_number->nb_inplace_add);
         return &type->tp_as_sequence->sq_inplace_repeat;
@@ -406,7 +405,7 @@ static MagicMethodLookupResult get_magic_method_slot(PyTypeObject *type, char co
     if (name == "__imul__")
     {
         if (type->tp_as_number == NULL && type->tp_as_sequence == NULL)
-            return MagicMethodLookupResult::error(NOT_IMPLEMENTED);
+            return NOT_IMPLEMENTED;
         if (type->tp_as_number != NULL)
             return &(type->tp_as_number->nb_inplace_multiply);
         return &type->tp_as_sequence->sq_inplace_repeat;
@@ -431,17 +430,17 @@ static MagicMethodLookupResult get_magic_method_slot(PyTypeObject *type, char co
 
 #undef SLOT
 
-    return MagicMethodLookupResult::error(INVALID_MAGIC_METHOD);
+    return INVALID_MAGIC_METHOD;
 }
 
 static MagicMethodLookupResult get_magic_method_implementation(char const *name_str)
 {
     std::string name{name_str};
 
-#define _IMPL(method_name)                \
-    if (name == #method_name)             \
-    {                                     \
-        return reinterpret_cast<void*>(impl##method_name); \
+#define _IMPL(method_name)        \
+    if (name == #method_name)     \
+    {                             \
+        return impl##method_name; \
     }
 
 #define IMPL(method_name) _IMPL(__##method_name##__)
@@ -511,7 +510,7 @@ static MagicMethodLookupResult get_magic_method_implementation(char const *name_
 #undef IMPL
 #undef _IMPL
 
-    return MagicMethodLookupResult::error(INVALID_MAGIC_METHOD);
+    return INVALID_MAGIC_METHOD;
 }
 
 static PyObject *enable_magic_method(PyObject *self, PyObject *args)
